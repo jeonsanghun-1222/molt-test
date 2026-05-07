@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MOLT — 직장인 유형 검사</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   :root {
     --bg: #f8fafc;
@@ -62,6 +63,36 @@
     width: 100%; max-width: 340px; padding: 24px; background: var(--gold); border: none; border-radius: var(--radius);
     color: #fff; font-family: 'Noto Sans KR', sans-serif; font-size: var(--fs-btn); font-weight: 700; cursor: pointer;
     box-shadow: 0 12px 24px rgba(26,95,168,0.3); transition: var(--transition);
+  }
+
+  .btn-secondary {
+    width: 100%;
+    max-width: 340px;
+    padding: 22px 24px;
+    border-radius: var(--radius);
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--gold-light);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    transition: var(--transition);
+  }
+
+  .result-actions {
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .result-actions .btn-primary,
+  .result-actions .btn-secondary {
+    max-width: none;
+    flex: 1 1 160px;
   }
 
   /* 질문 UI */
@@ -335,7 +366,10 @@
   <div class="etiquette-result-grid" id="res-etiquette-container"></div>
 
   <div style="padding:48px 24px;">
-    <button class="btn-primary" style="background:var(--surface2); color:var(--gold-light); box-shadow:none;" id="btn-retry">다시 하기</button>
+    <div class="result-actions">
+      <button class="btn-secondary" id="btn-save-result-img">결과 이미지 저장</button>
+      <button class="btn-primary" style="background:var(--surface2); color:var(--gold-light); box-shadow:none;" id="btn-retry">다시 하기</button>
+    </div>
   </div>
 </div>
 
@@ -1283,6 +1317,106 @@ let currentEIdx = 0;
 let currentSection = 0;
 let shuffledEtiquetteData = [];
 
+function formatYmd() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
+}
+
+async function saveResultAsImage({ auto = false } = {}) {
+  const target = document.getElementById('screen-result');
+  if (!target) return;
+  if (typeof html2canvas !== 'function') {
+    if (!auto) alert('이미지 저장 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
+    return;
+  }
+
+  const saveBtn = document.getElementById('btn-save-result-img');
+  const prevBtnText = saveBtn ? saveBtn.innerText : '';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerText = '이미지 생성 중...';
+  }
+
+  try {
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    await new Promise(requestAnimationFrame);
+
+    const canvas = await html2canvas(target, {
+      backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
+      // 해상도(선명도) 개선: DPR을 반영하되 상한을 높임 (파일 용량은 증가할 수 있음)
+      scale: Math.min(4, (window.devicePixelRatio || 1) * 2),
+      useCORS: true,
+      logging: false,
+      windowWidth: document.documentElement.scrollWidth,
+      foreignObjectRendering: true,
+      removeContainer: true,
+    });
+
+    const code = (document.getElementById('res-code')?.innerText || 'RESULT').replace(/\s+/g, '');
+    const filename = `MOLT_${code}_${formatYmd()}.png`;
+
+    // html2canvas 결과가 실제 화면보다 옅게 보이는 경우가 있어 저장용 색감만 소폭 보정
+    const outputCanvas = document.createElement('canvas');
+    outputCanvas.width = canvas.width;
+    outputCanvas.height = canvas.height;
+    const outCtx = outputCanvas.getContext('2d');
+    outCtx.imageSmoothingEnabled = true;
+    outCtx.imageSmoothingQuality = 'high';
+    outCtx.filter = 'saturate(1.12) contrast(1.08)';
+    outCtx.drawImage(canvas, 0, 0);
+    outCtx.filter = 'none';
+
+    const blob = await new Promise(resolve => outputCanvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('toBlob failed');
+
+    // 모바일: "사진앱에 바로 저장"은 웹에서 직접 불가.
+    // 대신 공유 시트(Web Share)로 사용자가 "사진에 저장/이미지 저장"을 선택할 수 있게 함.
+    const file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      await navigator.share({ files: [file], title: 'MOLT 결과', text: '결과 이미지를 저장/공유하세요.' });
+      return;
+    }
+
+    const isMobile = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+
+    // iOS Safari 등(공유 비지원): 새 탭으로 열고 "길게 눌러 이미지 저장" 유도
+    if (isMobile) {
+      const url = URL.createObjectURL(blob);
+      const opened = window.open(url, '_blank');
+      if (opened) {
+        if (!auto) alert('새 탭에서 이미지를 길게 눌러 “사진에 저장”을 선택해 주세요.');
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+      // 팝업이 막힌 경우엔 아래 다운로드로 폴백
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    // 데스크톱/기타: 다운로드
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch (e) {
+    if (!auto) alert('이미지 저장에 실패했습니다. (브라우저 보안/메모리 제한일 수 있어요)');
+    console.error(e);
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerText = prevBtnText || '결과 이미지로 저장';
+    }
+  }
+}
+
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1301,6 +1435,7 @@ function init() {
     if (t.id === 'btn-etiquette-prev') { if(currentEIdx > 0) { currentEIdx--; updateEtiquetteUI(); } return; }
     if (t.id === 'btn-etiquette-next') { handleEtiquetteNext(); return; }
     if (t.id === 'btn-retry') { location.reload(); return; }
+    if (t.id === 'btn-save-result-img') { saveResultAsImage({ auto: false }); return; }
 
     const scaleBtn = t.closest('.scale-btn');
     if (scaleBtn && document.getElementById('screen-question').classList.contains('active')) {
