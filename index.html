@@ -922,7 +922,7 @@ async function inlineImagesForCapture(root) {
 async function captureResultCanvas(target) {
   return await html2canvas(target, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
-    scale: Math.min(4, (window.devicePixelRatio || 1) * 2),
+    scale: 3,
     useCORS: true,
     allowTaint: false,
     logging: false,
@@ -978,23 +978,9 @@ async function saveResultAsImage({ auto = false } = {}) {
     const code = (document.getElementById('res-code')?.innerText || 'RESULT').replace(/\s+/g, '');
     const filename = `MOLT_${code}_${formatYmd()}.png`;
 
-    const outputCanvas = document.createElement('canvas');
-    outputCanvas.width = canvas.width;
-    outputCanvas.height = canvas.height;
-    const outCtx = outputCanvas.getContext('2d');
-    outCtx.imageSmoothingEnabled = true;
-    outCtx.imageSmoothingQuality = 'high';
-    outCtx.filter = 'saturate(1.12) contrast(1.08)';
-    outCtx.drawImage(canvas, 0, 0);
-    outCtx.filter = 'none';
-
-    let blob;
-    try {
-      blob = await canvasToPngBlob(outputCanvas);
-    } catch (postProcessError) {
-      console.warn('후처리 canvas 저장 실패, 원본 canvas로 재시도합니다:', postProcessError);
-      blob = await canvasToPngBlob(canvas);
-    }
+    // 화질 저하를 막기 위해 별도 outputCanvas 재복사/필터 처리를 하지 않고,
+    // html2canvas가 생성한 원본 canvas를 그대로 PNG로 저장한다.
+    const blob = await canvasToPngBlob(canvas);
 
     const file = new File([blob], filename, { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
