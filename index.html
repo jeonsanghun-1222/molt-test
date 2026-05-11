@@ -790,6 +790,162 @@ function formatYmd() {
   return `${yyyy}${mm}${dd}`;
 }
 
+async function waitForImageReady(img) {
+  if (!img) return;
+
+  if (img.complete && img.naturalWidth > 0) {
+    if (typeof img.decode === 'function') {
+      try { await img.decode(); } catch (e) { /* decode 실패 시에도 기존 로드 상태를 신뢰 */ }
+    }
+    return;
+  }
+
+  await new Promise(resolve => {
+    const done = () => resolve();
+    img.addEventListener('load', done, { once: true });
+    img.addEventListener('error', done, { once: true });
+  });
+}
+
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function pickLocalImageAsDataUrl(expectedFileName) {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/webp,image/*';
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.top = '-9999px';
+
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      if (!file) { resolve(null); return; }
+
+      const expected = (expectedFileName || '').toLowerCase();
+      const selected = (file.name || '').toLowerCase();
+      if (expected && selected !== expected) {
+        const ok = confirm(`선택한 파일명이 ${expectedFileName}이 아닙니다.\n그래도 이 이미지로 저장할까요?`);
+        if (!ok) { resolve(null); return; }
+      }
+
+      try {
+        resolve(await readBlobAsDataUrl(file));
+      } catch (e) {
+        console.error('선택한 이미지 파일 읽기 실패:', e);
+        resolve(null);
+      }
+    }, { once: true });
+
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+async function imageToDataUrlForCapture(img) {
+  const currentSrc = img.getAttribute('src') || img.currentSrc;
+  if (!currentSrc || currentSrc.startsWith('data:')) return currentSrc || null;
+
+  await waitForImageReady(img);
+
+  // 1차: 서버 환경(http/https/localhost)에서는 fetch로 원본 PNG를 읽어 Data URL로 변환한다.
+  // file:// 직접 실행 환경에서는 브라우저 보안 정책상 fetch가 차단될 수 있다.
+  try {
+    const response = await fetch(currentSrc, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    return await readBlobAsDataUrl(blob);
+  } catch (fetchError) {
+    console.warn('이미지 fetch 변환 실패, canvas 방식으로 재시도:', currentSrc, fetchError);
+  }
+
+  // 2차: 현재 화면에 보이는 이미지를 canvas에 직접 그려 Data URL로 변환한다.
+  // 단, file:// 로컬 이미지나 CORS 제한 이미지에서는 canvas가 taint되어 실패할 수 있다.
+  try {
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      return canvas.toDataURL('image/png');
+    }
+  } catch (canvasError) {
+    console.warn('이미지 canvas 변환 실패:', currentSrc, canvasError);
+  }
+
+  return null;
+}
+
+async function inlineImagesForCapture(root) {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  const originals = [];
+
+  for (const img of imgs) {
+    const originalSrc = img.getAttribute('src');
+    let dataUrl = await imageToDataUrlForCapture(img);
+
+    // HTML 파일을 더블클릭(file://)으로 실행한 경우, 브라우저가 로컬 PNG를 캔버스에 포함하지 못한다.
+    // 이때는 사용자가 현재 결과 유형 PNG를 한 번 선택하면 FileReader로 안전하게 Data URL 변환이 가능하다.
+    if (!dataUrl && location.protocol === 'file:' && originalSrc && /\.(png|jpg|jpeg|webp)$/i.test(originalSrc)) {
+      const expectedName = originalSrc.split('/').pop();
+      alert(`현재 HTML을 직접 열어 실행 중이라 브라우저가 ${expectedName} 파일을 저장 이미지에 자동 포함하지 못합니다.\n다음 창에서 ${expectedName} 파일을 선택해 주세요.`);
+      dataUrl = await pickLocalImageAsDataUrl(expectedName);
+    }
+
+    if (!dataUrl) {
+      throw new Error(`이미지를 저장용으로 변환하지 못했습니다: ${originalSrc || img.currentSrc || '(src 없음)'}`);
+    }
+
+    if (originalSrc !== dataUrl) {
+      originals.push({ img, originalSrc });
+      img.setAttribute('src', dataUrl);
+      await waitForImageReady(img);
+    }
+  }
+
+  return function restoreImages() {
+    originals.forEach(({ img, originalSrc }) => {
+      if (originalSrc) img.setAttribute('src', originalSrc);
+    });
+  };
+}
+
+async function captureResultCanvas(target) {
+  return await html2canvas(target, {
+    backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
+    scale: Math.min(4, (window.devicePixelRatio || 1) * 2),
+    useCORS: true,
+    allowTaint: false,
+    logging: false,
+    windowWidth: document.documentElement.scrollWidth,
+    foreignObjectRendering: false,
+    imageTimeout: 15000,
+    removeContainer: true,
+  });
+}
+
+async function canvasToPngBlob(canvas) {
+  return await new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error('toBlob returned null'));
+      }, 'image/png');
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
 async function saveResultAsImage({ auto = false } = {}) {
   const target = document.getElementById('screen-result');
   if (!target) return;
@@ -800,6 +956,8 @@ async function saveResultAsImage({ auto = false } = {}) {
 
   const saveBtn = document.getElementById('btn-save-result-img');
   const prevBtnText = saveBtn ? saveBtn.innerText : '';
+  let restoreImages = () => {};
+
   if (saveBtn) {
     saveBtn.disabled = true;
     saveBtn.innerText = '이미지 생성 중...';
@@ -807,17 +965,15 @@ async function saveResultAsImage({ auto = false } = {}) {
 
   try {
     if (document.fonts && document.fonts.ready) { await document.fonts.ready; }
+
+    // 결과 상단 PNG가 저장본에서 누락되지 않도록 캡처 전 Data URL로 인라인 변환한다.
+    // file:// 직접 실행 시 자동 변환이 차단되면 파일 선택 방식으로 보완한다.
+    restoreImages = await inlineImagesForCapture(target);
+
+    await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
 
-    const canvas = await html2canvas(target, {
-      backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
-      scale: Math.min(4, (window.devicePixelRatio || 1) * 2),
-      useCORS: true,
-      logging: false,
-      windowWidth: document.documentElement.scrollWidth,
-      foreignObjectRendering: true,
-      removeContainer: true,
-    });
+    const canvas = await captureResultCanvas(target);
 
     const code = (document.getElementById('res-code')?.innerText || 'RESULT').replace(/\s+/g, '');
     const filename = `MOLT_${code}_${formatYmd()}.png`;
@@ -832,8 +988,13 @@ async function saveResultAsImage({ auto = false } = {}) {
     outCtx.drawImage(canvas, 0, 0);
     outCtx.filter = 'none';
 
-    const blob = await new Promise(resolve => outputCanvas.toBlob(resolve, 'image/png'));
-    if (!blob) throw new Error('toBlob failed');
+    let blob;
+    try {
+      blob = await canvasToPngBlob(outputCanvas);
+    } catch (postProcessError) {
+      console.warn('후처리 canvas 저장 실패, 원본 canvas로 재시도합니다:', postProcessError);
+      blob = await canvasToPngBlob(canvas);
+    }
 
     const file = new File([blob], filename, { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
@@ -862,12 +1023,16 @@ async function saveResultAsImage({ auto = false } = {}) {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   } catch (e) {
-    if (!auto) alert('이미지 저장에 실패했습니다.');
+    if (!auto) {
+      const detail = e && e.message ? `\n\n상세 오류: ${e.message}` : '';
+      alert('이미지 저장에 실패했습니다.\n\nHTML을 직접 열어 실행 중이면 결과 유형 PNG 파일을 선택해야 저장 이미지에 포함됩니다.\n또는 터미널에서 python -m http.server 8000 으로 실행 후 다시 시도해 주세요.' + detail);
+    }
     console.error(e);
   } finally {
+    restoreImages();
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.innerText = prevBtnText || '결과 이미지로 저장';
+      saveBtn.innerText = prevBtnText || '결과 이미지 저장';
     }
   }
 }
