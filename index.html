@@ -187,9 +187,11 @@
   /* 그래프 시각화 */
   .axis-row { padding: 12px 24px; margin-bottom: 10px; }
   .axis-labels { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4; }
-  .axis-end-label { flex: 1 1 0; max-width: 42%; }
-  .axis-end-label.left { text-align: left; }
-  .axis-end-label.right { text-align: right; }
+  .axis-end-label { flex: 1 1 0; max-width: 42%; display: flex; flex-direction: column; gap: 2px; }
+  .axis-end-label.left { text-align: left; align-items: flex-start; }
+  .axis-end-label.right { text-align: right; align-items: flex-end; }
+  .axis-label-main { display: block; }
+  .axis-label-sub { display: block; font-size: 12px; color: var(--gold-dim); }
   .axis-track { height: 14px; background: var(--surface2); border-radius: 7px; position: relative; display: flex; align-items: center; justify-content: center; }
   .axis-fill-left { position: absolute; right: 50%; height: 100%; background: var(--gold); border-radius: 7px 0 0 7px; transition: width 1s; }
   .axis-fill-right { position: absolute; left: 50%; height: 100%; background: var(--accent); border-radius: 0 7px 7px 0; transition: width 1s; }
@@ -1259,11 +1261,11 @@ function calculateResult() {
 
   const axesEl = document.getElementById('res-axes'); axesEl.innerHTML = '';
   const labels = [
-    ['시스템 지향 · Alignment (A)', '자율/목표 지향 · Goal-driven (G)'],
-    ['관계/협업 · Relationship (R)', '독립/전문 · Independence (I)'],
-    ['맥락 공유 · Sharing (S)', '핵심 요약 · Conciseness (C)'],
-    ['원칙/절차 · Principle (P)', '유연/실무 · Flexibility (F)'],
-    ['안정/신중 · Thoroughness (T)', '적응/도전 · Adaptability (A)']
+    ['<span class="axis-label-main">시스템 지향 · Alignment</span><span class="axis-label-sub">(A)</span>', '<span class="axis-label-main">자율/목표 지향 · Goal-driven</span><span class="axis-label-sub">(G)</span>'],
+    ['<span class="axis-label-main">관계/협업 · Relationship</span><span class="axis-label-sub">(R)</span>', '<span class="axis-label-main">독립/전문 · Independence</span><span class="axis-label-sub">(I)</span>'],
+    ['<span class="axis-label-main">맥락 공유 · Sharing</span><span class="axis-label-sub">(S)</span>', '<span class="axis-label-main">핵심 요약 · Conciseness</span><span class="axis-label-sub">(C)</span>'],
+    ['<span class="axis-label-main">원칙/절차 · Principle</span><span class="axis-label-sub">(P)</span>', '<span class="axis-label-main">유연/실무 · Flexibility</span><span class="axis-label-sub">(F)</span>'],
+    ['<span class="axis-label-main">안정/신중 · Thoroughness</span><span class="axis-label-sub">(T)</span>', '<span class="axis-label-main">적응/도전 · Adaptability</span><span class="axis-label-sub">(A)</span>']
   ];
   axisScores.forEach((s, i) => {
     const pct = Math.min(Math.abs(s) / 12 * 50, 50);
