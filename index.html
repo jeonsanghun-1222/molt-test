@@ -186,7 +186,10 @@
 
   /* 그래프 시각화 */
   .axis-row { padding: 12px 24px; margin-bottom: 10px; }
-  .axis-labels { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; }
+  .axis-labels { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4; }
+  .axis-end-label { flex: 1 1 0; max-width: 42%; }
+  .axis-end-label.left { text-align: left; }
+  .axis-end-label.right { text-align: right; }
   .axis-track { height: 14px; background: var(--surface2); border-radius: 7px; position: relative; display: flex; align-items: center; justify-content: center; }
   .axis-fill-left { position: absolute; right: 50%; height: 100%; background: var(--gold); border-radius: 7px 0 0 7px; transition: width 1s; }
   .axis-fill-right { position: absolute; left: 50%; height: 100%; background: var(--accent); border-radius: 0 7px 7px 0; transition: width 1s; }
@@ -1057,6 +1060,7 @@ async function saveResultAsImage({ auto = false } = {}) {
     const file = new File([blob], filename, { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
       await navigator.share({ files: [file], title: 'MOLT 결과', text: '결과 이미지를 저장/공유하세요.' });
+      if (!auto) alert('이미지 저장이 완료되었습니다.');
       return;
     }
 
@@ -1080,6 +1084,7 @@ async function saveResultAsImage({ auto = false } = {}) {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+    if (!auto) alert('이미지 저장이 완료되었습니다.');
   } catch (e) {
     if (!auto) {
       const detail = e && e.message ? `\n\n상세 오류: ${e.message}` : '';
@@ -1253,16 +1258,22 @@ function calculateResult() {
   document.getElementById('res-weaknesses').innerHTML = info.weaknesses.map(w => `<div class="list-item">${w}</div>`).join('');
 
   const axesEl = document.getElementById('res-axes'); axesEl.innerHTML = '';
-  const labels = [['시스템 지향', '자율/목표'], ['관계/협업', '독립/전문'], ['맥락 공유', '핵심 요약'], ['원칙/절차', '유연/실무'], ['안정/신중', '적응/도전']];
+  const labels = [
+    ['시스템 지향 · Alignment (A)', '자율/목표 지향 · Goal-driven (G)'],
+    ['관계/협업 · Relationship (R)', '독립/전문 · Independence (I)'],
+    ['맥락 공유 · Sharing (S)', '핵심 요약 · Conciseness (C)'],
+    ['원칙/절차 · Principle (P)', '유연/실무 · Flexibility (F)'],
+    ['안정/신중 · Thoroughness (T)', '적응/도전 · Adaptability (A)']
+  ];
   axisScores.forEach((s, i) => {
     const pct = Math.min(Math.abs(s) / 12 * 50, 50);
     const isNeutral = (s === 0);
     axesEl.innerHTML += `
       <div class="axis-row">
         <div class="axis-labels">
-          <span>${labels[i][0]}</span>
+          <span class="axis-end-label left">${labels[i][0]}</span>
           ${isNeutral ? '<span class="axis-neutral-badge">⚖ 균형</span>' : ''}
-          <span>${labels[i][1]}</span>
+          <span class="axis-end-label right">${labels[i][1]}</span>
         </div>
         <div class="axis-track">
           <div class="axis-fill-left" style="width:${s > 0 ? pct : 0}%"></div>
