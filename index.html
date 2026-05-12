@@ -112,14 +112,42 @@
   .question-header { padding: 48px 24px 32px; }
   .question-num { font-size: 16px; color: var(--gold-dim); margin-bottom: 16px; font-weight: 700; }
   .question-text { font-family: 'Noto Serif KR', serif; font-size: var(--fs-question); font-weight: 700; line-height: 1.4; padding-bottom: 20px; border-bottom: 4px solid var(--gold-dim); }
-  .ab-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 32px 24px 24px; }
+  .ab-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 44px 24px 24px; }
   .ab-statement {
-    background: var(--surface); border: 2px solid var(--border); border-radius: 20px; padding: 24px 16px; font-size: var(--fs-statement);
-    line-height: 1.55; color: var(--text); font-weight: 600; transition: var(--transition); min-height: 120px;
-    display: flex; align-items: center; justify-content: center; text-align: center; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.05);
+    position: relative;
+    overflow: visible;
+    background: var(--surface); border: 2px solid var(--border); border-radius: 20px; padding: 34px 16px 24px; font-size: var(--fs-statement);
+    line-height: 1.55; color: var(--text); font-weight: 600; transition: var(--transition); min-height: 132px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.05);
   }
   .ab-statement.active-a { border-color: var(--gold); background: rgba(26,95,168,0.08); color: var(--gold-light); }
   .ab-statement.active-b { border-color: var(--accent); background: rgba(43,143,212,0.08); color: var(--gold-light); }
+  .ab-choice-label {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--gold);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    line-height: 1;
+    box-shadow: 0 6px 14px rgba(26,95,168,0.22);
+    z-index: 2;
+  }
+  #stmt-b .ab-choice-label { background: var(--accent); box-shadow: 0 6px 14px rgba(43,143,212,0.22); }
+  .ab-statement-text {
+    width: 100%;
+    text-align: center;
+  }
   .scale-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0 24px; }
   .scale-btn {
     height: 80px; border-radius: 20px; border: 2px solid var(--border); background: var(--surface); cursor: pointer;
@@ -1118,6 +1146,21 @@ function showSectionIntro() {
   showScreen('section-intro');
 }
 
+function setABStatement(el, label, text) {
+  el.innerHTML = '';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'ab-choice-label';
+  labelEl.innerText = label;
+
+  const textEl = document.createElement('div');
+  textEl.className = 'ab-statement-text';
+  textEl.innerText = text;
+
+  el.appendChild(labelEl);
+  el.appendChild(textEl);
+}
+
 function updateQuestion() {
   const q = QUESTIONS[currentQ];
   const s = SECTIONS[q.section];
@@ -1125,8 +1168,8 @@ function updateQuestion() {
   document.getElementById('q-counter').innerText = `${currentQ + 1} / 30`;
   document.getElementById('q-num').innerText = `진단 문항 ${currentQ + 1}`;
   document.getElementById('q-text').innerText = `당신의 성향에 더 가까운 것은?`;
-  document.getElementById('stmt-a').innerText = q.a;
-  document.getElementById('stmt-b').innerText = q.b;
+  setABStatement(document.getElementById('stmt-a'), 'A', q.a);
+  setABStatement(document.getElementById('stmt-b'), 'B', q.b);
   document.getElementById('progress-fill').style.width = `${((currentQ + 1) / 30) * 100}%`;
   const ans = answers[currentQ];
   document.querySelectorAll('#screen-question .scale-btn').forEach(b => b.classList.remove('selected'));
